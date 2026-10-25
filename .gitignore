@@ -1,0 +1,5 @@
+venv/
+.streamlit/secrets.toml
+splitwise_ledger.json
+__pycache__/
+.DS_Store
