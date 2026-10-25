@@ -1,84 +1,148 @@
-# 💸 Splitwise 2.0
+# 💸 Splitwise 2.0 — Next-Gen AI Expense Management Engine
 
-> An intelligent, next-generation group expense ledger powered by Google Gemini Vision & NLP, featuring algorithmic debt minimization, UPI-native settlement, and temporary self-closing trip groups.
+A resilient, multimodal group expense management and debt minimization platform built with **Python**, **Streamlit**, and the **Google Gemini API**. 
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Google Gemini](https://img.shields.io/badge/Google%20GenAI-Gemini%203.8%20Flash-4E75F6.svg?logo=google&logoColor=white)](https://ai.google.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+Unlike conventional bill splitters, **Splitwise 2.0** features an automated multimodal receipt parser, natural language spoken/word expense resolution, dynamic multi-currency conversion, an O(N log N) greedy cash-flow settlement minimizer, and zero-downtime offline fallback architecture.
 
 ---
 
-## 📌 Problem Statement & Solution
+## 🚀 Key Features
 
-Traditional group expense apps like Splitwise solved the manual arithmetic of who owes whom, but have not evolved past their original design:
-- **Manual Data Entry**: Every receipt line item has to be manually typed in, encouraging unfair equal splits.
-- **Disconnected Settlements**: Apps show balances, but users must leave the app, pay via UPI separately, and remember to manually mark debts settled.
-- **Tangled Debts**: Instead of clean net transfers, small pairwise debts accumulate into chaotic payment webs.
-- **Permanent Clutter**: One-off groups (weekend trips, college fests, flat dinners) linger forever without a clean closure.
+### 1. 📸 Multimodal AI Receipt Splitter (Gemini Vision)
+- **Line-Item Extraction**: Uploads receipt photos (JPG/PNG) and extracts individual item names, raw amounts, itemized taxes, and discounts.
+- **Dynamic Granular Allocation**: Assigns specific dishes/items to individual consumers rather than splitting blind subtotals.
+- **Proportional Tax/Discount Distribution**: Distributes overall bill taxes and service fees proportionally based on each individual's consumption ratio.
 
-**Splitwise 2.0** solves this by layering an **Intelligence Layer** (Gemini Vision OCR + Resilient NLP Engine) and a **Payments Layer** (UPI deep-links and dynamic QR codes) directly over a robust, multi-method core expense ledger.
+### 2. 💬 Smart Hybrid NLP Entry Engine (Zero-Downtime Architecture)
+- **Natural Language Parsing**: Parses conversational text entries (e.g., *"Rohan bought movie tickets for 1200 with Aman and me"*).
+- **Spoken Word & Multi-Currency Detection**: Intelligently maps verbal amounts and currencies (e.g., *"two hundred dollars"*, *"thousand euros"*, *"fifty bucks"*) into base ledger values.
+- **503 & Rate-Limit Resiliency**: If external cloud endpoints experience high-traffic spikes (HTTP 503) or rate limits, a deterministic local regex engine intercepts the request instantly with zero UI disruption.
 
----
+### 3. 🧮 Greedy Debt Minimization (O(N log N))
+- **Cash Flow Optimization**: Naive group settling produces O(N^2) circular transactions. Splitwise 2.0 uses a greedy two-pointer debt minimization algorithm to collapse mutual group debts into the absolute minimum number of settlement transfers.
+- **Mobile UPI Deep Links & QR Codes**: Dynamically generates NPCI-compliant UPI deep links (`upi://pay`) and scannable QR codes with pre-filled payee IDs and exact settlement amounts for instant settlement via Google Pay, PhonePe, or Paytm.
 
-## 🚀 Key Features Implemented
+### 4. ✈️ Trip Mode & Multi-Group Management
+- **Lifecycle Trip Mode**: Create temporary event ledgers with automated expiration dates that lock and archive upon conclusion.
+- **Dynamic Roster Controls**: Seamlessly create groups, add/remove friends without registration walls, and delete inactive groups.
+- **Recurring Schedules & Nudges**: Automate monthly fixed splits (rent, Wi-Fi, subscriptions) with scheduled date trackers and automated balance nudges.
 
-### 1. Flexible Core Splitting (4 Methods)
-Every expense can be split:
-- **Equally** across all group members.
-- By **Exact Amount** per person.
-- By **Percentage (%)** of the bill.
-- By **Shares / Ratios** (e.g., 2 shares for person A, 1 share for person B).
-
-### 2. Smart AI Bill Splitter (Gemini Vision OCR)
-- Upload photos or screenshots of itemized restaurant and shopping receipts.
-- Powered by `gemini-3.8-flash` vision with zero-latency thinking config to extract item names, quantities, taxes, and discounts into structured data.
-- Interactive multi-select UI lets group members tag what they ordered. Taxes and discounts are automatically calculated and distributed proportionally.
-
-### 3. Natural Language Expense Entry (Resilient Hybrid NLP)
-- Log expenses by typing plain-English sentences:  
-  *`"I paid 1500 for dinner for me, Aman and Rohan"`*
-- Uses Google Gemini to extract the payer, amount, participants, and category with an instant local fallback engine ensuring zero downtime even during cloud capacity spikes.
-- Includes a mandatory confirmation screen before committing data to the ledger.
-
-### 4. "Who Owes Whom" Debt Minimizer
-- Nets down every individual's balance in the group.
-- Executes an optimal greedy balance matching algorithm ($O(N \log N)$) that collapses tangled multi-party webs of small debts into the minimum possible number of direct settlements.
-
-### 5. Native UPI Settle-Up
-- Eliminates manual app-switching with dynamically generated `upi://pay` deep links and on-the-fly QR codes for instant mobile payment apps (GPay, PhonePe, Paytm).
-- Supports both full payments and partial settlement tracking.
-
-### 6. Trip Mode (Self-Closing Groups)
-- Temporary group flag with an expiration end date for trips, hostel events, and festivals.
-- Automatically flags when an event has concluded and archives the group with a finalized closure summary.
-
-### 7. Recurring Expenses & Automated Nudges
-- Scheduler that auto-generates repeat monthly expenses (rent, Wi-Fi, shared streaming subscriptions) when due.
-- Active nudges for outstanding unpaid balances.
-
-### 8. Frictionless Roster (No Sign-Up Required)
-- Add friends and flatmates to the group ledger using their name, email, or phone number without requiring them to download or register first.
-
-### 9. Analytics, Audit Trail & CSV Export
-- Interactive Plotly spending breakdowns by category and contributor.
-- Live keyword search across historical records.
-- Immutable audit log tracking changes and payments.
-- One-click export of group ledgers to CSV.
+### 5. 💱 Real-Time Forex & Analytics
+- **Live Currency Converter**: Built-in interactive currency converter across major global currencies (INR, USD, EUR, GBP, AED, CAD, AUD, SGD, JPY).
+- **Data Visualization**: Category spending breakdowns via Plotly charts, keyword transaction filtering, and full ledger CSV export.
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## 🏗️ System Architecture
 
-```text
-[ User / Browser ]
-        │
-        ▼
-[ Streamlit UI Layer ] ─── (Tabs: Ledger | AI Bill | NLP Add | Analytics | Recurring)
-        │
-   ┌────┴───────────────────────────┬──────────────────────────┐
-   ▼                                ▼                          ▼
-[ Intelligence Layer ]      [ Core Ledger Engine ]      [ Payments Layer ]
- • Gemini 3.8 Flash Vision   • 4 Split Math Calculators   • UPI URI Builder
- • Zero-Lag NLP Parser       • Greedy Debt Minimizer      • Dynamic QR Codes
- • Resilient Fallback Engine • JSON State Persistence     • Partial Settlements
+                      +-----------------------------+
+                      |   User Input / Web UI       |
+                      |  (Streamlit Cloud / Local)  |
+                      +--------------+--------------+
+                                     |
+             +-----------------------+-----------------------+
+             |                                               |
+             v                                               v
+    [Multimodal Receipt]                           [Plain Text Statement]
+             |                                               |
+             v                                               v
+  +----------------------+                        +----------------------+
+  | Gemini Vision Model  |                        |  Gemini Flash NLP    |
+  +----------+-----------+                        +----------+-----------+
+             |                                               |
+      (On 503 / Timeout)                              (On 503 / Timeout)
+             |                                               |
+             +-----------------------+-----------------------+
+                                     |
+                                     v
+                      +-----------------------------+
+                      | Deterministic Local Parser  |
+                      | (Action Verbs, Numbers, FX) |
+                      +--------------+--------------+
+                                     |
+                                     v
+                      +-----------------------------+
+                      |  Greedy Cash-Flow Engine    |
+                      |  - Balances Computation     |
+                      |  - Debt Minimization        |
+                      +--------------+--------------+
+                                     |
+             +-----------------------+-----------------------+
+             |                                               |
+             v                                               v
+  +----------------------+                        +----------------------+
+  | Dynamic NPCI UPI QR  |                        | Persistent JSON / DB |
+  | & Mobile Deep Links  |                        |  Audit & CSV Export  |
+  +----------------------+                        +----------------------+
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend & App Framework**: Streamlit
+- **AI & Multimodal Vision**: Google GenAI SDK (gemini-3.8-flash)
+- **Data Manipulation & Analytics**: Pandas, Plotly
+- **QR Code & Image Processing**: qrcode, Pillow (PIL)
+- **Persistence**: JSON-backed local ledger engine with audit trails
+
+---
+
+## 📦 Installation & Local Setup
+
+### 1. Clone the Repository
+
+    git clone https://github.com/BruceWayneTech/splitwise-2.0.git
+    cd splitwise-2.0
+
+### 2. Set Up a Virtual Environment (Recommended)
+
+    # Windows
+    python -m venv venv
+    venv\Scripts\activate
+
+    # macOS / Linux
+    python3 -m venv venv
+    source venv/bin/activate
+
+### 3. Install Required Dependencies
+
+Create a `requirements.txt` file in the root folder with:
+
+    streamlit>=1.38.0
+    google-genai>=0.1.1
+    pandas>=2.2.0
+    plotly>=5.24.0
+    qrcode>=7.4.2
+    pillow>=10.4.0
+
+Then run:
+
+    pip install -r requirements.txt
+
+### 4. Configure Your Gemini API Key
+
+Create a `.streamlit` folder in your project root, and inside it add a file named `secrets.toml`:
+
+    # .streamlit/secrets.toml
+    GEMINI_API_KEY = "your_actual_gemini_api_key_here"
+
+*(Alternatively, you can export it in your terminal as an environment variable: `export GEMINI_API_KEY="your_api_key"`)*
+
+### 5. Run the Application
+
+    streamlit run app.py
+
+Streamlit will automatically open `http://localhost:8501` in your default browser.
+
+---
+
+## 🔒 Security & Privacy
+
+- `.streamlit/secrets.toml` and runtime data files (`splitwise_ledger.json`) are excluded via `.gitignore` to prevent leaking private credentials or expense data to version control.
+- Designed with zero mandatory sign-up walls for participants, prioritizing fast onboarding and frictionless tracking.
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
