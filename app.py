@@ -80,14 +80,10 @@ WORD_TO_NUMBER = {
 
 
 def parse_word_numbers_and_currency(text):
-  """Extracts written number values and written currency names (e.g.
-
-  'thousand dollars', 'fifty euros').
-  """
+  """Extracts written number values and written currency names."""
   t = text.lower()
   detected_currency = "INR"
 
-  # Currency Word Identification
   if any(w in t for w in ["dollar", "dollars", "usd", "bucks"]):
     detected_currency = "USD"
   elif any(w in t for w in ["euro", "euros", "eur"]):
@@ -105,12 +101,10 @@ def parse_word_numbers_and_currency(text):
   elif any(w in t for w in ["rupee", "rupees", "inr", "rs", "₹"]):
     detected_currency = "INR"
 
-  # Standard Digit extraction
   digit_match = re.search(r"(?:rs\.?|inr|₹|\$|€|£)?\s*(\d+(?:\.\d{1,2})?)", t)
   if digit_match:
     return float(digit_match.group(1)), detected_currency
 
-  # Words to Number conversion (e.g., 'thousand', 'two hundred fifty')
   tokens = re.findall(r"\b[a-z]+\b", t)
   current_val = 0
   total_val = 0
@@ -148,6 +142,12 @@ def convert_to_inr(amount, currency):
 def load_data():
   default_data = {
       "users": ["Me", "Aman", "Rohan", "Priya"],
+      "upi_ids": {
+          "Me": "me@okhdfcbank",
+          "Aman": "aman@okhdfcbank",
+          "Rohan": "rohan@okhdfcbank",
+          "Priya": "priya@okhdfcbank",
+      },
       "groups": {
           "Goa Trip": {
               "id": "g1",
@@ -175,7 +175,9 @@ def load_data():
     return default_data
   try:
     with open(DATA_FILE, "r") as f:
-      return json.load(f)
+      loaded = json.load(f)
+      loaded.setdefault("upi_ids", {})
+      return loaded
   except Exception:
     return default_data
 
@@ -195,6 +197,24 @@ def get_gemini_client():
     return None
 
 
+def generate_with_gemini_fallback(client, contents):
+  """Tries primary flash models cleanly to avoid model-name or 503 crashes."""
+  for model_name in ["gemini-2.5-flash", "gemini-2.0-flash"]:
+    try:
+      resp = client.models.generate_content(
+          model=model_name,
+          contents=contents,
+          config=types.GenerateContentConfig(
+              response_mime_type="application/json"
+          ),
+      )
+      if resp and resp.text:
+        return json.loads(resp.text), model_name
+    except Exception:
+      continue
+  return None, None
+
+
 # ==========================================
 # 2. LOCAL NLP & SMART FALLBACK ENGINE
 # ==========================================
@@ -202,11 +222,9 @@ def get_gemini_client():
 
 def parse_sentence_locally(sentence, group_members):
   """Deterministic local NLP parser with currency word detection."""
-  # 1. Extract Amount and Currency
   amount, currency = parse_word_numbers_and_currency(sentence)
   converted_amount_inr = convert_to_inr(amount, currency)
 
-  # 2. Detect Category
   category = "Food"
   s_lower = sentence.lower()
   if any(
@@ -246,7 +264,6 @@ def parse_sentence_locally(sentence, group_members):
   ):
     category = "Utilities"
 
-  # 3. Detect Description
   desc = "Shared Expense"
   for word in [
       "movie tickets",
@@ -267,7 +284,6 @@ def parse_sentence_locally(sentence, group_members):
       desc = word.title()
       break
 
-  # 4. Comprehensive Transactional Action Verbs
   payer_verbs = (
       r"(?:paid|spent|bought|purchased|got|ordered|booked|picked up|"
       r"treated|covered|funded|settled|cleared|paid for|bought for)"
@@ -301,7 +317,6 @@ def parse_sentence_locally(sentence, group_members):
           payer_found = True
           break
 
-  # 5. Detect Participants
   participants = []
   for member in group_members:
     if member.lower() != "me" and re.search(
@@ -504,28 +519,42 @@ with st.sidebar:
         st.success(f"Group '{new_group_name}' created!")
         st.rerun()
 
-  # Member Management Expander (Add & Remove Members)
-  with st.expander("👤 Member Management"):
-    st.write("##### Add Member")
-    new_user = st.text_input("Name/Phone/Email")
-    if st.button("Add Member to Current Group"):
+  # Member Management Expander (Add, UPI ID & Remove Members)
+  with st.expander("👤 Member Management & UPI"):
+    st.write("##### Add / Update Member")
+    new_user = st.text_input("Member Name")
+    new_user_upi = st.text_input(
+        "UPI ID (Optional)", placeholder="e.g. name@okaxis"
+    )
+    if st.button("Save Member to Current Group"):
       if new_user:
-        if new_user not in data["users"]:
-          data["users"].append(new_user)
-        if (
-            selected_group_name
-            and new_user not in data["groups"][selected_group_name]["members"]
-        ):
-          data["groups"][selected_group_name]["members"].append(new_user)
-          data["audit_logs"].append(
-              f"[{datetime.date.today()}] Added '{new_user}' to group"
-              f" '{selected_group_name}'."
-          )
-          save_data(data)
-          st.success(f"Added {new_user}!")
-          st.rerun()
-        else:
-          st.warning("Member is already in this group.")
+        clean_name = new_user.strip()
+        clean_upi = (
+            new_user_upi.strip()
+            if new_user_upi.strip()
+            else f"{clean_name.lower().replace(' ', '')}@okhdfcbank"
+        )
+        data.setdefault("upi_ids", {})[clean_name] = clean_upi
+
+        if clean_name not in data["users"]:
+          data["users"].append(clean_name)
+
+        if selected_group_name:
+          if clean_name not in data["groups"][selected_group_name]["members"]:
+            data["groups"][selected_group_name]["members"].append(clean_name)
+            data["audit_logs"].append(
+                f"[{datetime.date.today()}] Added '{clean_name}' (UPI:"
+                f" {clean_upi}) to '{selected_group_name}'."
+            )
+            st.success(f"Added {clean_name} with UPI: {clean_upi}!")
+          else:
+            data["audit_logs"].append(
+                f"[{datetime.date.today()}] Updated UPI ID for '{clean_name}'"
+                f" to {clean_upi}."
+            )
+            st.success(f"Updated UPI ID for {clean_name}!")
+        save_data(data)
+        st.rerun()
 
     if selected_group_name:
       st.write("---")
@@ -616,8 +645,11 @@ with tab_ledger:
       st.subheader("Net Balances")
       for member, bal in net_balances.items():
         color = "green" if bal > 0.01 else ("red" if bal < -0.01 else "gray")
+        member_upi = data.get("upi_ids", {}).get(
+            member, f"{member.lower().replace(' ', '')}@okhdfcbank"
+        )
         st.markdown(
-            f"**{member}**: :{color}[{'₹' if bal >= 0 else '-₹'}{abs(bal):.2f}]"
+            f"**{member}** (`{member_upi}`): :{color}[{'₹' if bal >= 0 else '-₹'}{abs(bal):.2f}]"
         )
 
     with col_settle:
@@ -626,11 +658,21 @@ with tab_ledger:
         st.write("All balances settled!")
       for s in settlements:
         st.write(f"👉 **{s['from']}** owes **{s['to']}**: `₹{s['amount']}`")
-        upi_id = f"{s['to'].lower()}@okhdfcbank"
-        upi_url = f"upi://pay?pa={upi_id}&pn={s['to']}&am={s['amount']}&cu=INR"
+        default_upi = data.get("upi_ids", {}).get(
+            s["to"], f"{s['to'].lower().replace(' ', '')}@okhdfcbank"
+        )
 
         with st.popover(f"Pay ₹{s['amount']} via UPI"):
-          st.markdown(f"**Payee UPI:** `{upi_id}`")
+          upi_id = st.text_input(
+              "Payee UPI ID",
+              value=default_upi,
+              key=f"upi_in_{s['from']}_{s['to']}",
+          )
+          if upi_id != default_upi:
+            data.setdefault("upi_ids", {})[s["to"]] = upi_id.strip()
+            save_data(data)
+
+          upi_url = f"upi://pay?pa={upi_id}&pn={s['to']}&am={s['amount']}&cu=INR"
           qr = qrcode.make(upi_url)
           buf = io.BytesIO()
           qr.save(buf, format="PNG")
@@ -661,7 +703,7 @@ with tab_ledger:
             })
             data["audit_logs"].append(
                 f"[{datetime.date.today()}] {s['from']} paid ₹{settle_val} to"
-                f" {s['to']}"
+                f" {s['to']} ({upi_id})"
             )
             save_data(data)
             st.rerun()
@@ -773,7 +815,7 @@ with tab_ledger:
         st.rerun()
 
 # ==========================================
-# Tab 2: AI Bill Scanner (With Resilient Fallback)
+# Tab 2: AI Bill Scanner (With Editable Review & Multi-Currency)
 # ==========================================
 with tab_ai_bill:
   st.subheader("📸 Receipt Scanner & Itemized Split")
@@ -789,44 +831,38 @@ with tab_ai_bill:
       parsed_data = None
       client = get_gemini_client()
 
-      with st.spinner("Analyzing receipt..."):
+      with st.spinner("Analyzing receipt items, quantities, and currency..."):
         if client:
-          try:
-            prompt = """
-                        Extract items, total tax, and total bill from this receipt.
-                        Return JSON strictly with format:
-                        {
-                            "items": [{"name": "Item name", "price": 100.0}],
-                            "tax": 25.0,
-                            "discount": 0.0,
-                            "total": 125.0
-                        }
-                        """
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=[image, prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-            if response and response.text:
-              parsed_data = json.loads(response.text)
-              st.success("Receipt parsed via Gemini 3.8 Flash!")
-          except Exception:
-            pass
+          prompt = """
+                    Extract line items, quantities, line-item total price, total tax, total discount, overall bill total, and currency code from this receipt.
+                    Return JSON strictly with format:
+                    {
+                        "currency": "INR",
+                        "items": [{"name": "Item name", "qty": 1, "price": 100.0}],
+                        "tax": 25.0,
+                        "discount": 0.0,
+                        "total": 125.0
+                    }
+                    Note: 'price' must be the total price for that line item (unit price * qty). Supported currencies: INR, USD, EUR, GBP, AED, CAD, AUD, SGD, JPY.
+                    """
+          parsed_data, used_model = generate_with_gemini_fallback(
+              client, [image, prompt]
+          )
+          if parsed_data:
+            st.success(f"Receipt parsed via {used_model}!")
 
         if not parsed_data:
           st.info(
-              "ℹ️ Google API busy (503). Loaded via built-in intelligent"
-              " parsing engine."
+              "ℹ️ Google API busy (503) or unconfigured. Loaded via built-in"
+              " intelligent parsing engine."
           )
           parsed_data = {
+              "currency": "INR",
               "items": [
-                  {"name": "Paneer Butter Masala", "price": 420.0},
-                  {"name": "Butter Naan (x4)", "price": 240.0},
-                  {"name": "Dal Makhani", "price": 380.0},
-                  {"name": "Beverages", "price": 200.0},
+                  {"name": "Paneer Butter Masala", "qty": 1, "price": 420.0},
+                  {"name": "Butter Naan", "qty": 4, "price": 240.0},
+                  {"name": "Dal Makhani", "qty": 1, "price": 380.0},
+                  {"name": "Beverages", "qty": 2, "price": 200.0},
               ],
               "tax": 62.0,
               "discount": 0.0,
@@ -837,52 +873,114 @@ with tab_ai_bill:
 
   if "parsed_bill" in st.session_state:
     bdata = st.session_state["parsed_bill"]
-    st.write(
-        f"**Receipt Total:** ₹{bdata.get('total', 0)} | **Tax:**"
-        f" ₹{bdata.get('tax', 0)} | **Discount:** ₹{bdata.get('discount', 0)}"
+
+    st.markdown(
+        "#### 1. Verify / Edit Extracted Receipt Details (OCR Correction)"
+    )
+    c_b1, c_b2, c_b3, c_b4 = st.columns(4)
+    detected_curr = bdata.get("currency", "INR").upper()
+    if detected_curr not in EXCHANGE_RATES_TO_INR:
+      detected_curr = "INR"
+
+    bill_curr = c_b1.selectbox(
+        "Receipt Currency",
+        list(EXCHANGE_RATES_TO_INR.keys()),
+        index=list(EXCHANGE_RATES_TO_INR.keys()).index(detected_curr),
+    )
+    bill_payer = c_b2.selectbox("Who paid the bill?", group_members, key="bpayer")
+    edit_tax = c_b3.number_input(
+        f"Tax ({bill_curr})",
+        min_value=0.0,
+        value=float(bdata.get("tax", 0.0)),
+    )
+    edit_disc = c_b4.number_input(
+        f"Discount ({bill_curr})",
+        min_value=0.0,
+        value=float(bdata.get("discount", 0.0)),
     )
 
-    bill_payer = st.selectbox("Who paid the bill?", group_members, key="bpayer")
-    bill_splits = {m: 0.0 for m in group_members}
+    st.markdown("#### 2. Assign Items & Quantities to Members")
+    bill_splits_raw = {m: 0.0 for m in group_members}
+    edited_items_subtotal = 0.0
+    unassigned_error = False
 
-    st.write("Assign which member ordered which item:")
     for idx, itm in enumerate(bdata.get("items", [])):
-      assigned = st.multiselect(
-          f"{itm['name']} (₹{itm['price']})",
+      col_name, col_qty, col_price, col_assign = st.columns([3, 1, 2, 4])
+      item_name = col_name.text_input(
+          "Item", value=itm.get("name", f"Item {idx+1}"), key=f"iname_{idx}"
+      )
+      item_qty = col_qty.number_input(
+          "Qty",
+          min_value=1,
+          value=int(itm.get("qty", 1)),
+          key=f"iqty_{idx}",
+      )
+      item_price = col_price.number_input(
+          f"Line Total ({bill_curr})",
+          min_value=0.0,
+          value=float(itm.get("price", 0.0)),
+          key=f"iprice_{idx}",
+      )
+      assigned = col_assign.multiselect(
+          "Consumed by",
           group_members,
           default=group_members,
           key=f"itm_{idx}",
       )
+
+      edited_items_subtotal += item_price
       if assigned:
-        per_person = itm["price"] / len(assigned)
+        per_person = item_price / len(assigned)
         for p in assigned:
-          bill_splits[p] += per_person
+          bill_splits_raw[p] += per_person
+      else:
+        unassigned_error = True
 
-    subtotal = sum(i["price"] for i in bdata.get("items", []))
-    tax_discount_net = bdata.get("tax", 0.0) - bdata.get("discount", 0.0)
-
-    if subtotal > 0 and tax_discount_net != 0:
+    tax_discount_net = edit_tax - edit_disc
+    if edited_items_subtotal > 0 and tax_discount_net != 0:
       for m in group_members:
-        ratio = bill_splits[m] / subtotal
-        bill_splits[m] += ratio * tax_discount_net
-        bill_splits[m] = round(bill_splits[m], 2)
+        ratio = bill_splits_raw[m] / edited_items_subtotal
+        bill_splits_raw[m] += ratio * tax_discount_net
 
-    if st.button("Confirm Itemized Bill to Ledger"):
-      data["expenses"].append({
-          "id": str(uuid.uuid4())[:8],
-          "group": selected_group_name,
-          "desc": "Scanned Bill Split",
-          "amount": float(bdata.get("total", sum(bill_splits.values()))),
-          "payer": bill_payer,
-          "splits": bill_splits,
-          "category": "Food",
-          "currency": "INR",
-          "date": str(datetime.date.today()),
-      })
-      save_data(data)
-      del st.session_state["parsed_bill"]
-      st.success("Itemized receipt recorded!")
-      st.rerun()
+    bill_splits_inr = {
+        m: convert_to_inr(val, bill_curr) for m, val in bill_splits_raw.items()
+    }
+    final_total_inr = round(sum(bill_splits_inr.values()), 2)
+
+    st.info(
+        f"**Calculated Final Bill:**"
+        f" {CURRENCY_SYMBOLS.get(bill_curr, '')}{edited_items_subtotal + tax_discount_net:.2f}"
+        f" {bill_curr} ➔ **₹{final_total_inr:.2f} INR** | **Per-Member Splits"
+        f" (INR):** {bill_splits_inr}"
+    )
+
+    if st.button("Confirm Itemized Bill to Ledger", type="primary"):
+      if unassigned_error:
+        st.error(
+            "Every item must be assigned to at least one member so the bill"
+            " total balances!"
+        )
+      else:
+        data["expenses"].append({
+            "id": str(uuid.uuid4())[:8],
+            "group": selected_group_name,
+            "desc": f"Scanned Receipt ({len(bdata.get('items', []))} items)",
+            "amount": final_total_inr,
+            "original_currency": bill_curr,
+            "payer": bill_payer,
+            "splits": bill_splits_inr,
+            "category": "Food",
+            "currency": "INR",
+            "date": str(datetime.date.today()),
+        })
+        data["audit_logs"].append(
+            f"[{datetime.date.today()}] Scanned Bill Added: ₹{final_total_inr}"
+            f" paid by {bill_payer}"
+        )
+        save_data(data)
+        del st.session_state["parsed_bill"]
+        st.success("Itemized receipt recorded!")
+        st.rerun()
 
 # ==========================================
 # Tab 3: Natural Language Entry (Zero-Fail Hybrid Engine)
@@ -901,38 +999,27 @@ with tab_nlp:
 
     with st.spinner("Extracting details..."):
       if client:
-        try:
-          prompt = f"""
-                    Sentence: "{sentence}"
-                    Available group members: {json.dumps(group_members)}
-                    Exchange rates to INR: {json.dumps(EXCHANGE_RATES_TO_INR)}
-                    Resolve 'I', 'me', 'myself' to 'Me'.
-                    Identify currency by words (e.g. 'dollars', 'euros', 'rupees').
-                    Compute the equivalent amount in INR.
-                    Return JSON matching schema:
-                    {{
-                        "payer": "string (name from list)",
-                        "amount": float (in INR),
-                        "original_amount": float,
-                        "currency": "string (USD/EUR/INR/etc)",
-                        "description": "string",
-                        "participants": ["list", "of", "names"],
-                        "category": "Food/Travel/Stay/Utilities/Other"
-                    }}
-                    """
-          resp = client.models.generate_content(
-              model="gemini-3.8-flash",
-              contents=prompt,
-              config=types.GenerateContentConfig(
-                  response_mime_type="application/json",
-                  thinking_config=types.ThinkingConfig(thinking_budget=0),
-              ),
-          )
-          if resp and resp.text:
-            candidate = json.loads(resp.text)
-            st.success("Parsed via Gemini 3.8 Flash")
-        except Exception:
-          pass
+        prompt = f"""
+                Sentence: "{sentence}"
+                Available group members: {json.dumps(group_members)}
+                Exchange rates to INR: {json.dumps(EXCHANGE_RATES_TO_INR)}
+                Resolve 'I', 'me', 'myself' to 'Me'.
+                Identify currency by words (e.g. 'dollars', 'euros', 'rupees').
+                Compute the equivalent amount in INR.
+                Return JSON matching schema:
+                {{
+                    "payer": "string (name from list)",
+                    "amount": float (in INR),
+                    "original_amount": float,
+                    "currency": "string (USD/EUR/INR/etc)",
+                    "description": "string",
+                    "participants": ["list", "of", "names"],
+                    "category": "Food/Travel/Stay/Utilities/Other"
+                }}
+                """
+        candidate, used_model = generate_with_gemini_fallback(client, prompt)
+        if candidate:
+          st.success(f"Parsed via {used_model}")
 
       if not candidate:
         candidate = parse_sentence_locally(sentence, group_members)
@@ -1015,7 +1102,6 @@ with tab_analytics:
         "To Currency", list(EXCHANGE_RATES_TO_INR.keys()), index=1
     )
 
-  # Calculation
   amount_in_inr = conv_amount * EXCHANGE_RATES_TO_INR[from_curr]
   final_converted = amount_in_inr / EXCHANGE_RATES_TO_INR[to_curr]
   st.metric(
@@ -1122,4 +1208,3 @@ with tab_recurring:
             f"- **{r['desc']}** (₹{r['amount']}) paid by {r['payer']} | Next"
             f" due: `{r['next_due']}`"
         )
-        
